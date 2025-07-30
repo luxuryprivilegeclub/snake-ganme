@@ -1,3 +1,181 @@
-body {
-    font-size: 15pt;
+// Set today's date as default
+document.getElementById('date').valueAsDate = new Date();
+
+// Set due date to 30 days from today
+const dueDate = new Date();
+dueDate.setDate(dueDate.getDate() + 30);
+document.getElementById('dueDate').valueAsDate = dueDate;
+
+// Update preview date
+document.getElementById('previewDate').textContent = formatDate(new Date());
+document.getElementById('previewDueDate').textContent = formatDate(dueDate);
+
+// Format date as YYYY-MM-DD
+function formatDate(date) {
+    const d = new Date(date);
+    let month = '' + (d.getMonth() + 1);
+    let day = '' + d.getDate();
+    const year = d.getFullYear();
+
+    if (month.length < 2) month = '0' + month;
+    if (day.length < 2) day = '0' + day;
+
+    return [year, month, day].join('-');
 }
+
+// Add item button
+document.getElementById('addItem').addEventListener('click', function() {
+    const itemsContainer = document.getElementById('itemsContainer');
+    const newItem = document.createElement('div');
+    newItem.className = 'item-row';
+    newItem.innerHTML = `
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" class="form-control item-description" placeholder="Item description">
+        </div>
+        <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" class="form-control item-quantity" value="1" min="1">
+        </div>
+        <div class="form-group">
+            <label>Price</label>
+            <input type="number" class="form-control item-price" value="0" min="0" step="0.01">
+        </div>
+        <div class="form-group" style="display: flex; align-items: end;">
+            <button class="btn btn-danger remove-item">✕</button>
+        </div>
+    `;
+    itemsContainer.appendChild(newItem);
+
+    // Remove button
+    newItem.querySelector('.remove-item').addEventListener('click', function () {
+        newItem.remove();
+        updatePreview();
+    });
+
+    // Input listeners
+    const inputs = newItem.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('input', updatePreview);
+    });
+
+    updatePreview();
+});
+
+// Remove item
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('remove-item')) {
+        if (document.querySelectorAll('.item-row').length > 1) {
+            e.target.closest('.item-row').remove();
+            updatePreview();
+        }
+    }
+});
+
+// Logo upload
+document.getElementById('logo').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const logoPreview = document.getElementById('logoPreview');
+            logoPreview.innerHTML = `<img src="${e.target.result}" alt="Company Logo">`;
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+// Update invoice preview
+function updatePreview() {
+    document.getElementById('previewInvoiceNumber').textContent = '#' + document.getElementById('invoiceNumber').value;
+    document.getElementById('previewDate').textContent = document.getElementById('date').value;
+    document.getElementById('previewDueDate').textContent = document.getElementById('dueDate').value;
+
+    // From
+    document.getElementById('previewFromName').textContent = document.getElementById('fromName').value;
+    document.getElementById('previewFromAddress').textContent = document.getElementById('fromAddress').value;
+    document.getElementById('previewFromCity').textContent = document.getElementById('fromCity').value + ', ' + document.getElementById('fromZip').value;
+    document.getElementById('previewFromEmail').textContent = document.getElementById('fromEmail').value;
+    document.getElementById('previewFromPhone').textContent = document.getElementById('fromPhone').value;
+
+    // To
+    document.getElementById('previewToName').textContent = document.getElementById('toName').value;
+    document.getElementById('previewToAddress').textContent = document.getElementById('toAddress').value;
+    document.getElementById('previewToCity').textContent = document.getElementById('toCity').value + ', ' + document.getElementById('toZip').value;
+    document.getElementById('previewToEmail').textContent = document.getElementById('toEmail').value;
+    document.getElementById('previewToPhone').textContent = document.getElementById('toPhone').value;
+
+    // Items
+    const itemRows = document.querySelectorAll('.item-row');
+    const previewItems = document.getElementById('previewItems');
+    previewItems.innerHTML = '';
+    let subtotal = 0;
+
+    itemRows.forEach(row => {
+        const description = row.querySelector('.item-description').value;
+        const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
+        const price = parseFloat(row.querySelector('.item-price').value) || 0;
+        const total = quantity * price;
+        subtotal += total;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${description}</td>
+            <td>${quantity}</td>
+            <td>$${price.toFixed(2)}</td>
+            <td>$${total.toFixed(2)}</td>
+        `;
+        previewItems.appendChild(tr);
+    });
+
+    const tax = subtotal * 0.1;
+    const total = subtotal + tax;
+
+    document.getElementById('previewSubtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('previewTax').textContent = '$' + tax.toFixed(2);
+    document.getElementById('previewTotal').textContent = '$' + total.toFixed(2);
+
+    document.getElementById('previewNotes').textContent = document.getElementById('notes').value;
+    document.getElementById('previewTerms').textContent = document.getElementById('terms').value;
+}
+
+// Input change listener
+document.querySelectorAll('input, textarea, select').forEach(element => {
+    element.addEventListener('input', updatePreview);
+});
+
+// Initial update
+updatePreview();
+
+// Download PDF
+document.getElementById('downloadPdf').addEventListener('click', function() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const previewElement = document.querySelector('.invoice-preview');
+
+    html2canvas(previewElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+    }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = 190;
+        const pageHeight = 280;
+        const imgHeight = canvas.height * imgWidth / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 10;
+
+        doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft >= 0) {
+            position = heightLeft - imgHeight;
+            doc.addPage();
+            doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+        }
+
+        const invoiceNumber = document.getElementById('invoiceNumber').value || 'invoice';
+        doc.save(`invoice-${invoiceNumber}.pdf`);
+    });
+});
